@@ -70,6 +70,13 @@ input[type="range"]::-moz-range-thumb {
   border: 2px solid var(--color-background);
 }
 
+/* Kill all default table borders/gridlines */
+table, thead, tbody, tr, th, td {
+  border: none !important;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
 /* Light mode overrides */
 .light body,
 .light {
