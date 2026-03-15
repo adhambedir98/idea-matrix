@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as d3 from 'd3';
 import { Idea, Tier, TIER_COLORS } from '@/lib/types';
-import { getBubbleRadius } from '@/lib/utils';
+import { getBubbleRadius, calculateComposite } from '@/lib/utils';
 
 interface MatrixProps {
   ideas: Idea[];
@@ -30,6 +30,13 @@ const Y_TICKS = [
   { value: 7, label: '$10-50B' },
   { value: 10, label: '$50B+' },
 ];
+
+interface BubbleNode extends d3.SimulationNodeDatum {
+  idea: Idea;
+  targetX: number;
+  targetY: number;
+  r: number;
+}
 
 export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, onUpdateIdea }: MatrixProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,7 +144,6 @@ export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, on
           .attr('fill', '#94A3B8').attr('font-size', 11)
           .text(tick.label);
       }
-      // Numeric tick
       xAxisG.append('text')
         .attr('x', x).attr('y', tick.label ? 38 : 22)
         .attr('text-anchor', 'middle')
@@ -145,7 +151,6 @@ export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, on
         .text(tick.value.toString());
     });
 
-    // X axis label
     xAxisG.append('text')
       .attr('x', plotWidth / 2).attr('y', 58)
       .attr('text-anchor', 'middle')
@@ -175,23 +180,52 @@ export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, on
         .text(tick.value.toString());
     });
 
-    // Y axis label
     yAxisG.append('text')
       .attr('transform', `translate(${-72},${plotHeight / 2}) rotate(-90)`)
       .attr('text-anchor', 'middle')
       .attr('fill', '#CBD5E1').attr('font-size', 13).attr('font-weight', '600')
       .text('↑ Size of the Prize (TAM)');
 
-    // Bubbles
+    // ── Bubbles with collision avoidance ──
     const bubbleG = g.append('g').attr('class', 'bubbles');
 
-    // Sort: smaller bubbles on top for visibility
-    const sortedIdeas = [...ideas].sort((a, b) => b.conviction - a.conviction);
+    // Build simulation nodes
+    const nodes: BubbleNode[] = ideas.map(idea => {
+      const score = idea.compositeScore ?? calculateComposite(idea);
+      const r = getBubbleRadius(score);
+      return {
+        idea,
+        targetX: xScale(idea.speedToDemo),
+        targetY: yScale(idea.sizeOfPrize),
+        x: xScale(idea.speedToDemo),
+        y: yScale(idea.sizeOfPrize),
+        r,
+      };
+    });
 
-    sortedIdeas.forEach(idea => {
-      const cx = xScale(idea.speedToDemo);
-      const cy = yScale(idea.sizeOfPrize);
-      const r = getBubbleRadius(idea.conviction);
+    // Run a force simulation to nudge overlapping bubbles apart
+    const simulation = d3.forceSimulation<BubbleNode>(nodes)
+      .force('x', d3.forceX<BubbleNode>(d => d.targetX).strength(0.8))
+      .force('y', d3.forceY<BubbleNode>(d => d.targetY).strength(0.8))
+      .force('collide', d3.forceCollide<BubbleNode>(d => d.r + 2).strength(1).iterations(4))
+      .stop();
+
+    // Run simulation synchronously (no animation needed — just settle positions)
+    for (let i = 0; i < 120; i++) simulation.tick();
+
+    // Clamp positions within the plot area
+    nodes.forEach(n => {
+      n.x = Math.max(n.r, Math.min(plotWidth - n.r, n.x!));
+      n.y = Math.max(n.r, Math.min(plotHeight - n.r, n.y!));
+    });
+
+    // Sort: draw larger bubbles first so smaller ones render on top
+    nodes.sort((a, b) => b.r - a.r);
+
+    nodes.forEach(node => {
+      const { idea, r } = node;
+      const cx = node.x!;
+      const cy = node.y!;
       const color = TIER_COLORS[idea.tier as Tier];
       const isSelected = idea.id === selectedId;
 
@@ -200,7 +234,7 @@ export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, on
         .attr('cursor', 'pointer')
         .attr('transform', `translate(${cx},${cy})`);
 
-      // Glow filter
+      // Selection ring
       if (isSelected) {
         bubble.append('circle')
           .attr('r', r + 4)
@@ -232,12 +266,13 @@ export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, on
           .text(labelText);
       }
 
-      // Interaction handlers
+      // Click
       bubble.on('click', (event: MouseEvent) => {
         event.stopPropagation();
         onSelectIdea(idea.id);
       });
 
+      // Hover tooltip
       bubble.on('mouseenter', (event: MouseEvent) => {
         const rect = svgRef.current?.getBoundingClientRect();
         if (rect) {
@@ -253,7 +288,7 @@ export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, on
         setTooltip(null);
       });
 
-      // Drag behavior
+      // Drag to reposition
       const drag = d3.drag<SVGGElement, unknown>()
         .on('start', function () {
           d3.select(this).raise();
@@ -324,7 +359,7 @@ export default function Matrix({ ideas, selectedId, showLabels, onSelectIdea, on
                tooltip.idea.tier === 'tier3' ? 'Tier 3' : 'Tier 4'}
             </span>
             <span className="text-xs text-[#94A3B8] ml-auto">
-              Conviction: {tooltip.idea.conviction}/10
+              Score: {tooltip.idea.compositeScore?.toFixed(1)}/10
             </span>
           </div>
         </div>

@@ -52,7 +52,7 @@ export default function RankingTable({ ideas, selectedId, onSelectIdea }: Rankin
     <div className="w-full h-full overflow-auto">
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10">
-          <tr className="bg-[#1E293B] border-b border-[#334155]">
+          <tr className="bg-[#1E293B]">
             <th className="px-3 py-3 text-left text-xs font-semibold text-[#94A3B8] uppercase tracking-wider w-12">
               #
             </th>
@@ -85,7 +85,7 @@ export default function RankingTable({ ideas, selectedId, onSelectIdea }: Rankin
             <tr
               key={idea.id}
               onClick={() => onSelectIdea(idea.id)}
-              className={`border-b border-[#1E293B] cursor-pointer transition-colors ${
+              className={`cursor-pointer transition-colors ${
                 idea.id === selectedId
                   ? 'bg-[#334155]'
                   : 'hover:bg-[#1E293B]/50'

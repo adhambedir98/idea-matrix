@@ -15,9 +15,9 @@ export function getTierColor(tier: Tier): string {
   return TIER_COLORS[tier];
 }
 
-export function getBubbleRadius(conviction: number): number {
-  // conviction 1-10 -> radius 12-40
-  return 12 + (conviction - 1) * (28 / 9);
+export function getBubbleRadius(compositeScore: number): number {
+  // composite score 1-10 -> radius 14-44
+  return 14 + (Math.max(1, Math.min(10, compositeScore)) - 1) * (30 / 9);
 }
 
 export function generateId(): string {
